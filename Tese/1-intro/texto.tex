@@ -1,0 +1,24 @@
+\chapter{Introduction}
+
+%=====================================================
+
+% A introdução geral do documento pode ser apresentada através das seguintes seções: Desafio, Motivação, Proposta, Contribuição e Organização do documento (especificando o que será tratado em cada um dos capítulos). O Capítulo 1 não contém subseções\footnote{Ver o Capítulo \ref{cap-exemplos} para comentários e exemplos de subseções.}. %
+
+
+
+Robocup is an international initiative that promotes scientific advances on robotic intelligence through competition, the initiative is divided into several different leagues, each one with it's own set of problems and focus, the subject of our work is the 3D Soccer Simulation League (3DSSL) who provides a simulated enviroment, physics and humanoid robots.
+
+Within 3DSSL rich environment and tools, the challenge focused in this work is motor control of the humanoid robot in several tasks utilizing Reinforcement Learning (RL) as the training method. RL is a machine learning technique inspired by the natural idea of learning by trial-and-error, selecting actions that maximizes the reward.
+
+Since RL is heavily dependent on sample size, the simulated environment is a cheap and efficient way of generating a great quantity of data when compared to real life, as it can lean on paralelism, can run faster than real-time, does not depend on an external agent to restart the task if the robot falls and the only hardware needed is the computer to run the simulation.
+
+The 3DSSL current league champion is the \emph{FC Portugal} team, as it was shown in \cite[]{abreu2023designing} they were able to successfully train the agent in a skill-sets such as \emph{sprint-kick} and \emph{locomotion} that allowed the agents to perform in the competition. All the skills are represented by one or two neural network policies trained by RL.
+
+The codebase for the \emph{FC Portugal} provides a strong foundation to develop new skills and behaviors, so it was utilized and modified to train the agent to achieve our goals.
+
+
+\section{Objective}
+
+This study aims to showcase how RL performs in training a policy to perform a long-jump skill.
+
+\section{Study Outline}
