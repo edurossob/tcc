@@ -206,13 +206,7 @@ class Long_Jump(gym.Env):
         # truncated: finished because out of bounds ou timed out. Not a terminal state
         # terminal: the robot is falling or timeout
 
-
-
         return self.observe(), reward, done, {}
-
-
-
-
 
 class Train(Train_Base):
     def __init__(self, script) -> None:

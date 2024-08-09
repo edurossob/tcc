@@ -4,11 +4,11 @@
 
 %=====================================================
 
-This chapter shows the specific methods utilized to train the specific skills
+This chapter shows the specific configurations utilized to train the proposed new skills
 \section{Skills}
+All of the following skills have their 
 
 \subsection{Jump}
-
 
 State space:
 - Observasion size of 70 Float numbers (32 bits)
@@ -20,10 +20,32 @@ Action Space:
 - Composed of all 
 
 Reward:
-- Positive displacement in the y-axis, or 0
+- MAX (Displacement in the y-axis, 0)
 '''
 
 \subsection{Long Jump}
+
+The Long Jump skill is inspired by the homonym sport, where the athlete must gain velocity in a short run and leap forward as far as possible from a takeoff point, called indicator board.
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=12cm]{long_jump.png}
+\caption{Long Jump schematics}
+\label{fig:long_jump_schematics}
+\end{figure}
+
+To train the agent within 3DSSL it is set an invisible line in a distance of 1/30th of the field length from the agent as the takeoff line. The line can be vizualied as one grass strip lenght, as showed in the image below.
+
+
+\begin{figure}[!htb]
+\centering
+\includegraphics[width=12cm]{agent.png}
+\caption{Agent on the starting point of a long jump}
+\label{fig:3DSSL_robot}
+\end{figure}
+
+the reward is different before and after the 
+
 
 State space:
 - Composed of all joint positions + torso height
