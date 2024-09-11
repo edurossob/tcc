@@ -1,4 +1,4 @@
-from agent.Base_Agent import Base_Agent as Agent
+from agent.Agent_LongJump import Agent as Agent
 from behaviors.custom.Step.Step import Step
 from world.commons.Draw import Draw
 from stable_baselines3 import PPO
@@ -112,12 +112,12 @@ class Long_Jump(gym.Env):
         r = self.player.world.robot
         
         for _ in range(25): 
-            self.player.scom.unofficial_beam((-11,0,0.50),0) # beam player continuously (floating above ground)
+            self.player.scom.unofficial_beam((0,0,r.beam_height),0) # beam player continuously (floating above ground)
             self.player.behavior.execute("Zero_Bent_Knees")
             self.sync()
 
         # beam player to ground
-        self.player.scom.unofficial_beam((-11,0,r.beam_height),0) 
+        self.player.scom.unofficial_beam((0,0,r.beam_height),0) 
         r.joints_target_speed[0] = 0.01 # move head to trigger physics update (rcssserver3d bug when no joint is moving)
         self.sync()
 
@@ -181,19 +181,18 @@ class Long_Jump(gym.Env):
         self.step_counter += 1
          
 
-
         touched_the_floor = False
         # Reward 
         reward = 0
         curr_x = r.cheat_abs_pos[0]
 
-        indicator_board_x = -10
+        indicator_board_x = 2
         is_before_jump = curr_x < indicator_board_x
         
         if (is_before_jump):
             reward = (curr_x - self.lastx)
-        else: # curr_x >= -10
-            reward = (curr_x + 10) * 3
+        else:
+            reward = curr_x * 2
             touched_the_floor = any([v for v in r.feet_toes_are_touching.values()])
             
         self.lastx = curr_x
@@ -214,7 +213,7 @@ class Train(Train_Base):
 
 
     def train(self, args):
-
+        print("trainings")
         #--------------------------------------- Learning parameters
         n_envs = min(16, os.cpu_count())
         n_steps_per_env = 1024  # RolloutBuffer is of size (n_steps_per_env * n_envs)
