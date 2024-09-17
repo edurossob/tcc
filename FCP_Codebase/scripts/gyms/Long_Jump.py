@@ -1,4 +1,4 @@
-from agent.Agent_LongJump import Agent as Agent
+from agent.Base_Agent import Base_Agent as Agent
 from behaviors.custom.Step.Step import Step
 from world.commons.Draw import Draw
 from stable_baselines3 import PPO
@@ -29,7 +29,7 @@ class Long_Jump(gym.Env):
         self.step_obj : Step = self.player.behavior.get_custom_behavior_object("Step") # Step behavior object
 
         # State space
-        obs_size = 71
+        obs_size = 72
         self.obs = np.zeros(obs_size, np.float32)
         self.observation_space = gym.spaces.Box(low=np.full(obs_size,-np.inf,np.float32), high=np.full(obs_size,np.inf,np.float32), dtype=np.float32)
 
@@ -85,6 +85,7 @@ class Long_Jump(gym.Env):
             self.obs[69] = float(not self.step_obj.step_generator.state_is_left_active) # 1 if right leg is active
 
         self.obs[70] = any([v for v in r.feet_toes_are_touching.values()])
+        self.obs[71] = self.d_from_indicator_board
         '''
         Expected observations for walking parameters/state (example):
         Time step        R  0  1  2  0   1   2   3  4
@@ -128,6 +129,7 @@ class Long_Jump(gym.Env):
 
         # memory variables
         self.lastx = r.cheat_abs_pos[0]
+        self.d_from_indicator_board = 2- self.lastx
         self.act = np.zeros(self.no_of_actions,np.float32)
 
         return self.observe(True)
@@ -185,9 +187,11 @@ class Long_Jump(gym.Env):
         # Reward 
         reward = 0
         curr_x = r.cheat_abs_pos[0]
-
         indicator_board_x = 2
-        is_before_jump = curr_x < indicator_board_x
+        self.d_from_indicator_board = indicator_board_x - curr_x
+
+        
+        is_before_jump = self.d_from_indicator_board > 0
         
         if (is_before_jump):
             reward = (curr_x - self.lastx)
