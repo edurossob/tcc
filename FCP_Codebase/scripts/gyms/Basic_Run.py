@@ -6,7 +6,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from scripts.commons.Server import Server
 from scripts.commons.Train_Base import Train_Base
 from time import sleep
-import os, gym
+import os,  gym
 import numpy as np
 
 '''

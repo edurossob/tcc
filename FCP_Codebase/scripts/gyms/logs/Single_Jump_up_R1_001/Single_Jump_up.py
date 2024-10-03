@@ -2,22 +2,24 @@ from agent.Base_Agent import Base_Agent as Agent
 from behaviors.custom.Step.Step import Step
 from world.commons.Draw import Draw
 from stable_baselines3 import PPO
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from scripts.commons.Server import Server
 from scripts.commons.Train_Base import Train_Base
 from time import sleep
-import os, gym
+import os
+import gymnasium as gym
 import numpy as np
 
 '''
 Objective:
 Learn how to run forward using step primitive
 ----------
-- class Basic_Run: implements an OpenAI custom gym
+- class Single_Jump_up: implements an OpenAI custom gym
 - class Train:  implements algorithms to train a new model or test an existing model
 '''
 
-class Basic_Run(gym.Env):
+class Single_Jump_up(gym.Env):
     def __init__(self, ip, server_p, monitor_p, r_type, enable_draw) -> None:
 
         self.robot_type = r_type
@@ -26,10 +28,10 @@ class Basic_Run(gym.Env):
         self.player = Agent(ip, server_p, monitor_p, 1, self.robot_type, "Gym", True, enable_draw)
         self.step_counter = 0 # to limit episode size
 
-        self.step_obj : Step = self.player.behavior.get_custom_behavior_object("Step") # Step behavior object
+        #self.step_obj : Step = self.player.behavior.get_custom_behavior_object("Step") # Step behavior object
 
         # State space
-        obs_size = 70
+        obs_size = 65
         self.obs = np.zeros(obs_size, np.float32)
         self.observation_space = gym.spaces.Box(low=np.full(obs_size,-np.inf,np.float32), high=np.full(obs_size,np.inf,np.float32), dtype=np.float32)
 
@@ -69,21 +71,23 @@ class Basic_Run(gym.Env):
         self.obs[44:64] = r.joints_speed[2:22]    /6.1395 # speed of    all joints except head & toes (for robot type 4)
         # *if foot is not touching the ground, then (px=0,py=0,pz=0,fx=0,fy=0,fz=0)
 
-        if init: # the walking parameters refer to the last parameters in effect (after a reset, they are pointless)
-            self.obs[64] = self.step_default_dur    /10 # step duration in time steps
-            self.obs[65] = self.step_default_z_span *20 # vertical movement span
-            self.obs[66] = self.step_default_z_max      # relative extension of support leg
-            self.obs[67] = 1 # step progress
-            self.obs[68] = 1 # 1 if left  leg is active
-            self.obs[69] = 0 # 1 if right leg is active
-        else:
-            self.obs[64] = self.step_obj.step_generator.ts_per_step   /10 # step duration in time steps
-            self.obs[65] = self.step_obj.step_generator.swing_height  *20 # vertical movement span
-            self.obs[66] = self.step_obj.step_generator.max_leg_extension / self.step_obj.leg_length # relative extension of support leg
-            self.obs[67] = self.step_obj.step_generator.external_progress # step progress
-            self.obs[68] = float(self.step_obj.step_generator.state_is_left_active)     # 1 if left  leg is active
-            self.obs[69] = float(not self.step_obj.step_generator.state_is_left_active) # 1 if right leg is active
+        # if init: # the walking parameters refer to the last parameters in effect (after a reset, they are pointless)
+        #     self.obs[64] = self.step_default_dur    /10 # step duration in time steps
+        #     self.obs[65] = self.step_default_z_span *20 # vertical movement span
+        #     self.obs[66] = self.step_default_z_max      # relative extension of support leg
+        #     self.obs[67] = 1 # step progress
+        #     self.obs[68] = 1 # 1 if left  leg is active
+        #     self.obs[69] = 0 # 1 if right leg is active
+        # else:
+        #     self.obs[64] = self.step_obj.step_generator.ts_per_step   /10 # step duration in time steps
+        #     self.obs[65] = self.step_obj.step_generator.swing_height  *20 # vertical movement span
+        #     self.obs[66] = self.step_obj.step_generator.max_leg_extension / self.step_obj.leg_length # relative extension of support leg
+        #     self.obs[67] = self.step_obj.step_generator.external_progress # step progress
+        #     self.obs[68] = float(self.step_obj.step_generator.state_is_left_active)     # 1 if left  leg is active
+        #     self.obs[69] = float(not self.step_obj.step_generator.state_is_left_active) # 1 if right leg is active
 
+        self.obs[65] = any([v for v in r.feet_toes_are_touching.values()])
+        
         '''
         Expected observations for walking parameters/state (example):
         Time step        R  0  1  2  0   1   2   3  4
@@ -101,8 +105,7 @@ class Basic_Run(gym.Env):
         self.player.scom.commit_and_send( r.get_command() )
         self.player.scom.receive()
 
-
-    def reset(self):
+    def reset(self, seed=0):
         '''
         Reset and stabilize the robot
         Note: for some behaviors it would be better to reduce stabilization or add noise
@@ -112,12 +115,12 @@ class Basic_Run(gym.Env):
         r = self.player.world.robot
         
         for _ in range(25): 
-            self.player.scom.unofficial_beam((-14,0,0.50),0) # beam player continuously (floating above ground)
+            self.player.scom.unofficial_beam((0,0,r.beam_height),0) # beam player continuously (floating above ground)
             self.player.behavior.execute("Zero_Bent_Knees")
             self.sync()
 
         # beam player to ground
-        self.player.scom.unofficial_beam((-14,0,r.beam_height),0) 
+        self.player.scom.unofficial_beam((0,0,r.beam_height),0) 
         r.joints_target_speed[0] = 0.01 # move head to trigger physics update (rcssserver3d bug when no joint is moving)
         self.sync()
 
@@ -127,10 +130,12 @@ class Basic_Run(gym.Env):
             self.sync()
 
         # memory variables
-        self.lastx = r.cheat_abs_pos[0]
+        self.last_z = r.loc_head_z
+        self.highest_z = 0
+        self.jumped = False
         self.act = np.zeros(self.no_of_actions,np.float32)
 
-        return self.observe(True)
+        return self.observe(True), {}
 
     def render(self, mode='human', close=False):
         return
@@ -138,7 +143,7 @@ class Basic_Run(gym.Env):
     def close(self):
         Draw.clear_all()
         self.player.terminate()
-
+        
     def step(self, action):
         
         r = self.player.world.robot
@@ -164,14 +169,14 @@ class Basic_Run(gym.Env):
         
         # add action as residuals to Step behavior (the index of these actions is not the typical index because both head joints are excluded)
         new_action = self.act[:20] * 2 # scale up actions to motivate exploration
-        new_action[[0,2,4,6,8,10]] += self.step_obj.values_l
-        new_action[[1,3,5,7,9,11]] += self.step_obj.values_r
-        new_action[12] -= 90 # arms down
-        new_action[13] -= 90 # arms down
-        new_action[16] += 90 # untwist arms
-        new_action[17] += 90 # untwist arms
-        new_action[18] += 90 # elbows at 90 deg
-        new_action[19] += 90 # elbows at 90 deg
+        # new_action[[0,2,4,6,8,10]] += self.step_obj.values_l
+        # new_action[[1,3,5,7,9,11]] += self.step_obj.values_r
+        # new_action[12] -= 90 # arms down
+        # new_action[13] -= 90 # arms down
+        # new_action[16] += 90 # untwist arms
+        # new_action[17] += 90 # untwist arms
+        # new_action[18] += 90 # elbows at 90 deg
+        # new_action[19] += 90 # elbows at 90 deg
 
         r.set_joints_target_position_direct( # commit actions:
             slice(2,22),        # act on all joints except head & toes (for robot type 4)
@@ -182,17 +187,29 @@ class Basic_Run(gym.Env):
         self.sync() # run simulation step
         self.step_counter += 1
          
-        reward = r.cheat_abs_pos[0] - self.lastx
-        self.lastx = r.cheat_abs_pos[0]
 
-        # terminal state: the robot is falling or timeout
-        terminal = r.cheat_abs_pos[2] < 0.3 or self.step_counter > 300
-
-        return self.observe(), reward, terminal, {}
-
+        touching_the_floor =  any([v for v in r.feet_toes_are_touching.values()])
+        # Reward 
+        reward = 0
+        terminated = False 
+        truncated = False 
 
 
+        if (self.jumped):
+            if(touching_the_floor): 
+                terminated = True
+                reward = self.highest_z
+            else:
+                self.highest_z = max(r.loc_head_z, self.highest_z)
+        else:
+            self.jumped = not touching_the_floor
+            truncated = (r.cheat_abs_pos[2] < 0.3 or self.step_counter > 400)
 
+
+        # truncated: finished because out of bounds ou timed out. Not a terminal state
+        # terminal: the robot is falling or timeout
+
+        return self.observe(), reward, terminated, truncated, {}
 
 class Train(Train_Base):
     def __init__(self, script) -> None:
@@ -200,14 +217,13 @@ class Train(Train_Base):
 
 
     def train(self, args):
-
         #--------------------------------------- Learning parameters
         n_envs = min(16, os.cpu_count())
         n_steps_per_env = 1024  # RolloutBuffer is of size (n_steps_per_env * n_envs)
         minibatch_size = 64    # should be a factor of (n_steps_per_env * n_envs)
         total_steps = 30000000
         learning_rate = 3e-4
-        folder_name = f'Basic_Run_R{self.robot_type}'
+        folder_name = f'Single_Jump_up_R{self.robot_type}'
         model_path = f'./scripts/gyms/logs/{folder_name}/'
 
         print("Model path:", model_path)
@@ -215,7 +231,7 @@ class Train(Train_Base):
         #--------------------------------------- Run algorithm
         def init_env(i_env):
             def thunk():
-                return Basic_Run( self.ip , self.server_p + i_env, self.monitor_p_1000 + i_env, self.robot_type, False )
+                return Single_Jump_up( self.ip , self.server_p + i_env, self.monitor_p_1000 + i_env, self.robot_type, False )
             return thunk
 
         servers = Server( self.server_p, self.monitor_p_1000, n_envs+1 ) #include 1 extra server for testing
@@ -245,7 +261,7 @@ class Train(Train_Base):
 
         # Uses different server and monitor ports
         server = Server( self.server_p-1, self.monitor_p, 1 )
-        env = Basic_Run( self.ip, self.server_p-1, self.monitor_p, self.robot_type, True )
+        env = Single_Jump_up( self.ip, self.server_p-1, self.monitor_p, self.robot_type, True )
         model = PPO.load( args["model_file"], env=env )
 
         try:

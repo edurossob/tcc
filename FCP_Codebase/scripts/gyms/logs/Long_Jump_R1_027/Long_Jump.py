@@ -2,11 +2,13 @@ from agent.Base_Agent import Base_Agent as Agent
 from behaviors.custom.Step.Step import Step
 from world.commons.Draw import Draw
 from stable_baselines3 import PPO
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from scripts.commons.Server import Server
 from scripts.commons.Train_Base import Train_Base
 from time import sleep
-import os, gym
+import os
+import gymnasium as gym
 import numpy as np
 
 '''
@@ -103,7 +105,7 @@ class Long_Jump(gym.Env):
         self.player.scom.commit_and_send( r.get_command() )
         self.player.scom.receive()
 
-    def reset(self):
+    def reset(self, seed=0):
         '''
         Reset and stabilize the robot
         Note: for some behaviors it would be better to reduce stabilization or add noise
@@ -132,7 +134,7 @@ class Long_Jump(gym.Env):
         self.d_from_indicator_board = 2- self.lastx
         self.act = np.zeros(self.no_of_actions,np.float32)
 
-        return self.observe(True)
+        return self.observe(True), {}
 
     def render(self, mode='human', close=False):
         return
@@ -201,15 +203,16 @@ class Long_Jump(gym.Env):
             
         self.lastx = curr_x
 
-        done = False 
+        terminated = False 
+        truncated = False 
         if (is_before_jump):
-            done = (r.cheat_abs_pos[2] < 0.3 or self.step_counter > 400)
+            truncated = (r.cheat_abs_pos[2] < 0.3 or self.step_counter > 400)
         else:
-            done = touched_the_floor
+            terminated = touched_the_floor
         # truncated: finished because out of bounds ou timed out. Not a terminal state
         # terminal: the robot is falling or timeout
 
-        return self.observe(), reward, done, {}
+        return self.observe(), reward, terminated, truncated, {}
 
 class Train(Train_Base):
     def __init__(self, script) -> None:
@@ -217,7 +220,6 @@ class Train(Train_Base):
 
 
     def train(self, args):
-        print("trainings")
         #--------------------------------------- Learning parameters
         n_envs = min(16, os.cpu_count())
         n_steps_per_env = 1024  # RolloutBuffer is of size (n_steps_per_env * n_envs)
@@ -293,3 +295,7 @@ Reward:
 - Displacement in the x-axis (it can be negative)
 - Note that cheat and visual data is only updated every 3 steps
 '''
+
+# Train start:    25/09/2024 20:41:30
+# Train end:      26/09/2024 04:03:26
+# Train duration: 7:21:55

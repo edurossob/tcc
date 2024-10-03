@@ -2,6 +2,7 @@ from agent.Base_Agent import Base_Agent as Agent
 from behaviors.custom.Step.Step import Step
 from world.commons.Draw import Draw
 from stable_baselines3 import PPO
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from scripts.commons.Server import Server
 from scripts.commons.Train_Base import Train_Base
@@ -14,11 +15,11 @@ import numpy as np
 Objective:
 Learn how to run forward using step primitive
 ----------
-- class Long_Jump: implements an OpenAI custom gym
+- class Single_Jump_up: implements an OpenAI custom gym
 - class Train:  implements algorithms to train a new model or test an existing model
 '''
 
-class Long_Jump(gym.Env):
+class Single_Jump_up(gym.Env):
     def __init__(self, ip, server_p, monitor_p, r_type, enable_draw) -> None:
 
         self.robot_type = r_type
@@ -27,10 +28,10 @@ class Long_Jump(gym.Env):
         self.player = Agent(ip, server_p, monitor_p, 1, self.robot_type, "Gym", True, enable_draw)
         self.step_counter = 0 # to limit episode size
 
-        self.step_obj : Step = self.player.behavior.get_custom_behavior_object("Step") # Step behavior object
+        #self.step_obj : Step = self.player.behavior.get_custom_behavior_object("Step") # Step behavior object
 
         # State space
-        obs_size = 72
+        obs_size = 66
         self.obs = np.zeros(obs_size, np.float32)
         self.observation_space = gym.spaces.Box(low=np.full(obs_size,-np.inf,np.float32), high=np.full(obs_size,np.inf,np.float32), dtype=np.float32)
 
@@ -70,23 +71,23 @@ class Long_Jump(gym.Env):
         self.obs[44:64] = r.joints_speed[2:22]    /6.1395 # speed of    all joints except head & toes (for robot type 4)
         # *if foot is not touching the ground, then (px=0,py=0,pz=0,fx=0,fy=0,fz=0)
 
-        if init: # the walking parameters refer to the last parameters in effect (after a reset, they are pointless)
-            self.obs[64] = self.step_default_dur    /10 # step duration in time steps
-            self.obs[65] = self.step_default_z_span *20 # vertical movement span
-            self.obs[66] = self.step_default_z_max      # relative extension of support leg
-            self.obs[67] = 1 # step progress
-            self.obs[68] = 1 # 1 if left  leg is active
-            self.obs[69] = 0 # 1 if right leg is active
-        else:
-            self.obs[64] = self.step_obj.step_generator.ts_per_step   /10 # step duration in time steps
-            self.obs[65] = self.step_obj.step_generator.swing_height  *20 # vertical movement span
-            self.obs[66] = self.step_obj.step_generator.max_leg_extension / self.step_obj.leg_length # relative extension of support leg
-            self.obs[67] = self.step_obj.step_generator.external_progress # step progress
-            self.obs[68] = float(self.step_obj.step_generator.state_is_left_active)     # 1 if left  leg is active
-            self.obs[69] = float(not self.step_obj.step_generator.state_is_left_active) # 1 if right leg is active
+        # if init: # the walking parameters refer to the last parameters in effect (after a reset, they are pointless)
+        #     self.obs[64] = self.step_default_dur    /10 # step duration in time steps
+        #     self.obs[65] = self.step_default_z_span *20 # vertical movement span
+        #     self.obs[66] = self.step_default_z_max      # relative extension of support leg
+        #     self.obs[67] = 1 # step progress
+        #     self.obs[68] = 1 # 1 if left  leg is active
+        #     self.obs[69] = 0 # 1 if right leg is active
+        # else:
+        #     self.obs[64] = self.step_obj.step_generator.ts_per_step   /10 # step duration in time steps
+        #     self.obs[65] = self.step_obj.step_generator.swing_height  *20 # vertical movement span
+        #     self.obs[66] = self.step_obj.step_generator.max_leg_extension / self.step_obj.leg_length # relative extension of support leg
+        #     self.obs[67] = self.step_obj.step_generator.external_progress # step progress
+        #     self.obs[68] = float(self.step_obj.step_generator.state_is_left_active)     # 1 if left  leg is active
+        #     self.obs[69] = float(not self.step_obj.step_generator.state_is_left_active) # 1 if right leg is active
 
-        self.obs[70] = any([v for v in r.feet_toes_are_touching.values()])
-        self.obs[71] = self.d_from_indicator_board
+        self.obs[65] = any([v for v in r.feet_toes_are_touching.values()])
+        
         '''
         Expected observations for walking parameters/state (example):
         Time step        R  0  1  2  0   1   2   3  4
@@ -104,7 +105,7 @@ class Long_Jump(gym.Env):
         self.player.scom.commit_and_send( r.get_command() )
         self.player.scom.receive()
 
-    def reset(self):
+    def reset(self, seed=0):
         '''
         Reset and stabilize the robot
         Note: for some behaviors it would be better to reduce stabilization or add noise
@@ -129,17 +130,20 @@ class Long_Jump(gym.Env):
             self.sync()
 
         # memory variables
-        self.lastx = r.cheat_abs_pos[0]
-        self.d_from_indicator_board = 2- self.lastx
+        self.last_z = r.loc_head_z
+        self.highest_z = 0
+        self.jumped = False
         self.act = np.zeros(self.no_of_actions,np.float32)
 
-        return self.observe(True)
+        return self.observe(True), {}
 
     def render(self, mode='human', close=False):
         return
 
     def close(self):
-        Draw.cstable_baselines3
+        Draw.clear_all()
+        self.player.terminate()
+        
     def step(self, action):
         
         r = self.player.world.robot
@@ -165,14 +169,14 @@ class Long_Jump(gym.Env):
         
         # add action as residuals to Step behavior (the index of these actions is not the typical index because both head joints are excluded)
         new_action = self.act[:20] * 2 # scale up actions to motivate exploration
-        new_action[[0,2,4,6,8,10]] += self.step_obj.values_l
-        new_action[[1,3,5,7,9,11]] += self.step_obj.values_r
-        new_action[12] -= 90 # arms down
-        new_action[13] -= 90 # arms down
-        new_action[16] += 90 # untwist arms
-        new_action[17] += 90 # untwist arms
-        new_action[18] += 90 # elbows at 90 deg
-        new_action[19] += 90 # elbows at 90 deg
+        # new_action[[0,2,4,6,8,10]] += self.step_obj.values_l
+        # new_action[[1,3,5,7,9,11]] += self.step_obj.values_r
+        # new_action[12] -= 90 # arms down
+        # new_action[13] -= 90 # arms down
+        # new_action[16] += 90 # untwist arms
+        # new_action[17] += 90 # untwist arms
+        # new_action[18] += 90 # elbows at 90 deg
+        # new_action[19] += 90 # elbows at 90 deg
 
         r.set_joints_target_position_direct( # commit actions:
             slice(2,22),        # act on all joints except head & toes (for robot type 4)
@@ -184,33 +188,28 @@ class Long_Jump(gym.Env):
         self.step_counter += 1
          
 
-        touched_the_floor = False
+        touching_the_floor =  any([v for v in r.feet_toes_are_touching.values()])
         # Reward 
         reward = 0
-        curr_x = r.cheat_abs_pos[0]
-        indicator_board_x = 2
-        self.d_from_indicator_board = indicator_board_x - curr_x
+        terminated = False 
+        truncated = False 
 
-        
-        is_before_jump = self.d_from_indicator_board > 0
-        
-        if (is_before_jump):
-            reward = (curr_x - self.lastx)
-        else:
-            reward = curr_x * 2
-            touched_the_floor = any([v for v in r.feet_toes_are_touching.values()])
-            
-        self.lastx = curr_x
 
-        done = False 
-        if (is_before_jump):
-            done = (r.cheat_abs_pos[2] < 0.3 or self.step_counter > 400)
+        if (self.jumped):
+            if(touching_the_floor): 
+                terminated = True
+                reward = self.highest_z
+            else:
+                self.highest_z = max(r.loc_head_z, self.highest_z)
         else:
-            done = touched_the_floor
+            self.jumped = not touching_the_floor
+            truncated = (r.cheat_abs_pos[2] < 0.3 or self.step_counter > 400)
+
+
         # truncated: finished because out of bounds ou timed out. Not a terminal state
         # terminal: the robot is falling or timeout
 
-        return self.observe(), reward, done, {}
+        return self.observe(), reward, terminated, truncated, {}
 
 class Train(Train_Base):
     def __init__(self, script) -> None:
@@ -218,14 +217,13 @@ class Train(Train_Base):
 
 
     def train(self, args):
-        print("trainings")
         #--------------------------------------- Learning parameters
         n_envs = min(16, os.cpu_count())
         n_steps_per_env = 1024  # RolloutBuffer is of size (n_steps_per_env * n_envs)
         minibatch_size = 64    # should be a factor of (n_steps_per_env * n_envs)
         total_steps = 30000000
         learning_rate = 3e-4
-        folder_name = f'Long_Jump_R{self.robot_type}'
+        folder_name = f'Single_Jump_up_R{self.robot_type}'
         model_path = f'./scripts/gyms/logs/{folder_name}/'
 
         print("Model path:", model_path)
@@ -233,7 +231,7 @@ class Train(Train_Base):
         #--------------------------------------- Run algorithm
         def init_env(i_env):
             def thunk():
-                return Long_Jump( self.ip , self.server_p + i_env, self.monitor_p_1000 + i_env, self.robot_type, False )
+                return Single_Jump_up( self.ip , self.server_p + i_env, self.monitor_p_1000 + i_env, self.robot_type, False )
             return thunk
 
         servers = Server( self.server_p, self.monitor_p_1000, n_envs+1 ) #include 1 extra server for testing
@@ -263,7 +261,7 @@ class Train(Train_Base):
 
         # Uses different server and monitor ports
         server = Server( self.server_p-1, self.monitor_p, 1 )
-        env = Long_Jump( self.ip, self.server_p-1, self.monitor_p, self.robot_type, True )
+        env = Single_Jump_up( self.ip, self.server_p-1, self.monitor_p, self.robot_type, True )
         model = PPO.load( args["model_file"], env=env )
 
         try:

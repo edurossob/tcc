@@ -98,11 +98,19 @@ class Server_Comm():
 
         for i in count(): # parse all messages and perform value updates, but heavy computation is only done once at the end 
             try:
-                if self.socket.recv_into(self.rcv_buff, nbytes=4) != 4: raise ConnectionResetError()
+                test = self.socket.recv_into(self.rcv_buff, nbytes=4)
+                if test != 4: 
+                    print ("Received message of size ", test)
+                    print ("Msg: ", self.rcv_buff[:4])
+                    raise ConnectionResetError()
                 msg_size = int.from_bytes(self.rcv_buff[:4], byteorder='big', signed=False)
-                if self.socket.recv_into(self.rcv_buff, nbytes=msg_size, flags=socket.MSG_WAITALL) != msg_size: raise ConnectionResetError()      
+                icles = self.socket.recv_into(self.rcv_buff, nbytes=msg_size, flags=socket.MSG_WAITALL)
+                if icles != msg_size: 
+                    print("Msg sized as ", icles)
+                    print ("Msg: ", self.rcv_buff[:msg_size])
+                    raise ConnectionResetError()      
             except ConnectionResetError:
-                print("\nError: socket was closed by rcssserver3d!")
+                print("\nError: ConnectionResetError socket was closed by rcssserver3d!")
                 exit()
 
             self.world_parser.parse(self.rcv_buff[:msg_size])
@@ -123,7 +131,7 @@ class Server_Comm():
         try:
             self.socket.send( (len(msg)).to_bytes(4,byteorder='big') + msg ) #Add message length in the first 4 bytes
         except BrokenPipeError:
-            print("\nError: socket was closed by rcssserver3d!")
+            print("\nError: BrokenPipeError socket was closed by rcssserver3d!")
             exit()
 
 
